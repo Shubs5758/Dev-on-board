@@ -1,0 +1,6 @@
+streamlit
+gitpython
+networkx
+pyvis
+ibm-watsonx-ai>=0.2.6
+ibm-generative-ai>=3.0.0
