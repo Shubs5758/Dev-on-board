@@ -185,26 +185,33 @@ def format_file_size(bytes_size: int) -> str:
         return f"{bytes_size / (1024 * 1024):.1f} MB"
 
 
-def should_skip_file(filepath: str) -> bool:
+def should_skip_file(filepath: str, repo_root: Optional[str] = None) -> bool:
     """
     Check if a file should be skipped during analysis.
     
     Args:
         filepath: Path to the file
+        repo_root: Optional repository root to evaluate relative paths
         
     Returns:
         True if file should be skipped
     """
+    if repo_root:
+        try:
+            filepath = os.path.relpath(filepath, repo_root)
+        except ValueError:
+            pass
+
     skip_patterns = [
         'node_modules/', '.git/', '__pycache__/', 'dist/', 'build/',
         'vendor/', '.venv/', 'venv/', 'env/', '.pytest_cache/',
         '.mypy_cache/', '.tox/', 'coverage/', '.coverage',
-        '.DS_Store', 'Thumbs.db', '.idea/', '.vscode/',
+        '.DS_Store', 'thumbs.db', '.idea/', '.vscode/',
         'target/', 'bin/', 'obj/', 'out/', 'pkg/',
-        '.next/', '.nuxt/', '.cache/', 'tmp/', 'temp/'
+        '.next/', '.nuxt/', '.cache/'
     ]
     
-    filepath_lower = filepath.lower()
+    filepath_lower = filepath.replace('\\', '/').lower()
     return any(pattern in filepath_lower for pattern in skip_patterns)
 
 

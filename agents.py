@@ -103,14 +103,14 @@ def agent_parse_files(repo_path: str, role: str) -> List[Dict]:
     # Walk through repository
     for root, dirs, files in os.walk(repo_path):
         # Skip directories
-        dirs[:] = [d for d in dirs if not utils.should_skip_file(os.path.join(root, d))]
+        dirs[:] = [d for d in dirs if not utils.should_skip_file(os.path.join(root, d), repo_path)]
         
         for filename in files:
             filepath = os.path.join(root, filename)
             total_files_scanned += 1
             
             # Skip if should be skipped
-            if utils.should_skip_file(filepath) or utils.should_skip_extension(filename):
+            if utils.should_skip_file(filepath, repo_path) or utils.should_skip_extension(filename):
                 skipped_files += 1
                 continue
             
