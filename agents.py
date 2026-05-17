@@ -4,6 +4,7 @@ Handles repository cloning, parsing, analysis, and conversational AI.
 """
 
 import os
+import re
 import tempfile
 import shutil
 from pathlib import Path
@@ -257,7 +258,8 @@ def agent_generate_project_summary(
     all_file_summaries: List[str],
     repo_name: str,
     role: str,
-    experience: str
+    experience: str,
+    parsed_files: Optional[List[Dict]] = None
 ) -> Dict:
     """
     Generate comprehensive project summary using AI.
@@ -311,33 +313,18 @@ Be specific and reference actual files from the summaries."""
             system="You are a senior software architect analyzing a codebase."
         )
         
-        # Try to extract JSON
-        if '```json' in result_text:
-            json_start = result_text.find('```json') + 7
-            json_end = result_text.find('```', json_start)
-            result_text = result_text[json_start:json_end].strip()
-        elif '```' in result_text:
-            json_start = result_text.find('```') + 3
-            json_end = result_text.find('```', json_start)
-            result_text = result_text[json_start:json_end].strip()
-        
-        result = json.loads(result_text)
+        result = _parse_json_result(result_text)
         return result
         
     except Exception as e:
-        # Fallback if JSON parsing fails
-        return {
-            'project_overview': f"Repository: {repo_name}\n\nAnalysis in progress...",
-            'key_observations': [
-                "Project structure being analyzed",
-                "Multiple file types detected",
-                "Dependencies being mapped"
-            ],
-            'tech_stack': ["Analysis in progress"],
-            'architecture_style': "Unknown",
-            'health_score': "Moderate complexity",
-            'files_to_read_first': []
-        }
+        print(f"[DEBUG] Project summary generation failed: {str(e)}")
+        return _build_fallback_project_summary(
+            repo_name,
+            all_file_summaries,
+            parsed_files,
+            role,
+            experience
+        )
 
 
 def agent_generate_onboarding_path(
@@ -429,21 +416,11 @@ Make tasks specific to the {role} role and reference actual files from the list.
             system="You are an experienced engineering manager creating onboarding plans."
         )
         
-        # Extract JSON
-        if '```json' in result_text:
-            json_start = result_text.find('```json') + 7
-            json_end = result_text.find('```', json_start)
-            result_text = result_text[json_start:json_end].strip()
-        elif '```' in result_text:
-            json_start = result_text.find('```') + 3
-            json_end = result_text.find('```', json_start)
-            result_text = result_text[json_start:json_end].strip()
-        
-        result = json.loads(result_text)
+        result = _parse_json_result(result_text)
         return result.get('phases', [])
         
     except Exception as e:
-        # Fallback phases
+        print(f"[DEBUG] Onboarding path generation failed: {str(e)}")
         return _get_fallback_phases(role, top_files)
 
 
@@ -498,6 +475,77 @@ def _get_fallback_phases(role: str, top_files: List[str]) -> List[Dict]:
             ]
         }
     ]
+
+
+def _extract_json_payload(result_text: str) -> str:
+    """Extract JSON payload from model output, handling markdown fences."""
+    if '```json' in result_text:
+        json_start = result_text.find('```json') + len('```json')
+        json_end = result_text.find('```', json_start)
+        if json_end != -1:
+            return result_text[json_start:json_end].strip()
+        return result_text[json_start:].strip()
+    if '```' in result_text:
+        json_start = result_text.find('```') + len('```')
+        json_end = result_text.find('```', json_start)
+        if json_end != -1:
+            return result_text[json_start:json_end].strip()
+        return result_text[json_start:].strip()
+    return result_text.strip()
+
+
+def _parse_json_result(result_text: str) -> Dict:
+    """Parse JSON from raw model output, with cleanup for common formatting issues."""
+    payload = _extract_json_payload(result_text)
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        cleaned = re.sub(r',\s*([}\]])', r'\1', payload)
+        return json.loads(cleaned)
+
+
+def _build_fallback_project_summary(
+    repo_name: str,
+    all_file_summaries: List[str],
+    parsed_files: Optional[List[Dict]],
+    role: str,
+    experience: str
+) -> Dict:
+    """Generate a safe fallback project summary when AI output cannot be parsed."""
+    language_set = sorted({f.get('language') for f in parsed_files or [] if f.get('language')})
+    if not language_set:
+        language_set = ['Unknown']
+
+    top_files = [f['path'] for f in (parsed_files or [])[:5]]
+    if not top_files:
+        top_files = ['README.md']
+
+    project_overview = (
+        f"{repo_name} is a codebase with {len(parsed_files or [])} files. "
+        f"The analysis pipeline completed with fallback content, using the available file structure and role context to create an onboarding summary. "
+        f"Primary languages detected: {', '.join(language_set)}."
+    )
+
+    return {
+        'project_overview': project_overview,
+        'key_observations': [
+            'Detected repository structure and main file types.',
+            'Built a fallback summary after AI output formatting issues.',
+            'Top files were selected based on role relevance and file size.',
+            'Graph and onboarding data were generated from parsed file metadata.',
+            'Inspect the suggested initial files and code paths to continue.'
+        ],
+        'tech_stack': language_set,
+        'architecture_style': 'Mixed / Unknown',
+        'health_score': 'Moderate complexity',
+        'files_to_read_first': [
+            {
+                'file': file_path,
+                'reason': 'High relevance for initial exploration based on repository structure.'
+            }
+            for file_path in top_files
+        ]
+    }
 
 
 def agent_chat(

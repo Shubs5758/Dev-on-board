@@ -378,7 +378,8 @@ def run_analysis(repo_url: str, role: str, experience: str):
             list(file_summaries.values()),
             clone_result['repo_name'],
             role,
-            experience
+            experience,
+            parsed_files=parsed_files
         )
         st.session_state.project_summary = project_summary
         
